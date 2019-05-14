@@ -83,6 +83,7 @@ int main() {
 	glEnable(GL_DEPTH_TEST);
 
 	// 初始化shader
+	Shader shader("shadowMappingVs.vs", "shadowMappingFs.fs");
 	Shader simpleDepthShader("shadowMappingDepthVs.vs", "shadowMappingDepthFs.fs");
 	Shader debugDepthQuad("debugQuadVs.vs", "debugQuadDepthFs.fs");
 
@@ -115,7 +116,7 @@ int main() {
 	glBindVertexArray(0);
 
 	// 加载纹理
-	unsigned int woodTexture = loadTexture("container.jpg");
+	unsigned int woodTexture = loadTexture("wood.jpg");
 
 	// 为渲染的深度贴图创建一个帧缓冲对象
 	unsigned int depthMapFBO;
@@ -130,8 +131,10 @@ int main() {
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
 	// 把生成的深度纹理作为帧缓冲的深度缓冲
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
@@ -141,7 +144,10 @@ int main() {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// 使用shader
-	simpleDepthShader.use();
+	shader.use();
+	shader.setInt("diffuseTexture", 0);
+	shader.setInt("shadowMap", 1);
+
 	debugDepthQuad.use();
 	// 设置shader属性
 	debugDepthQuad.setInt("depthMap", 0);
@@ -178,6 +184,7 @@ int main() {
 		lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
 		lightSpaceMatrix = lightProjection * lightView;
 		// 应用到shader
+		simpleDepthShader.use();
 		simpleDepthShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 
 		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
@@ -192,13 +199,30 @@ int main() {
 		glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		shader.use();
+		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
+		glm::mat4 view = camera.GetViewMatrix();
+		shader.setMat4("projection", projection);
+		shader.setMat4("view", view);
+		// set light uniforms
+		shader.setVec3("viewPos", camera.Position);
+		shader.setVec3("lightPos", lightPos);
+		shader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, woodTexture);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, depthMap);
+		renderScene(shader);
+
 		// 渲染深度图
 		debugDepthQuad.use();
 		debugDepthQuad.setFloat("near_plane", near_plane);
 		debugDepthQuad.setFloat("far_plane", far_plane);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, depthMap);
-		renderQuad();
+		//renderQuad();
 
 		//创建imgui
 		ImGui_ImplOpenGL3_NewFrame();
